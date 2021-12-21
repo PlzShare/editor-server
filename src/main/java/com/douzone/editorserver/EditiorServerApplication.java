@@ -1,4 +1,4 @@
-package com.douzone.editiorserver;
+package com.douzone.editorserver;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
