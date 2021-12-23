@@ -25,15 +25,12 @@ public class SyncDocumentController {
 	private SimpMessagingTemplate simpMessagingTemplate;
 	@Autowired
 	private DocumentService documentService;
-	
-	
+
 	private ConcurrentMap<Long, List<Map>> documentChanges = new ConcurrentHashMap<Long, List<Map>>();
 	
 	@PostMapping("/pub/{docNo}")
 	public void pub(@PathVariable Long docNo, @RequestBody Map incomingChange, @AuthUser User authUser) throws InterruptedException {
-		Thread.sleep(1500);
-		
-		System.out.println(authUser);	
+		System.out.println(authUser);
 		incomingChange.keySet().forEach((key) -> System.out.println("key : " + key + " , value : " + incomingChange.get(key)));		
 		incomingChange.put("user", authUser.getNo());
 
