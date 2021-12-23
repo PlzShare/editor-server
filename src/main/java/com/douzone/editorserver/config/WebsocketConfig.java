@@ -3,6 +3,7 @@ package com.douzone.editorserver.config;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -28,10 +29,12 @@ import com.douzone.editorserver.vo.User;
 public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
 	@Autowired
 	private TokenValidator tokenValidator;
+	@Value("{allowedOrigin}")
+	private String allowedOrigin;
 	@Override
 	public void registerStompEndpoints(StompEndpointRegistry registry) {
 		// TODO Auto-generated method stub
-		registry.addEndpoint("/ws").setAllowedOriginPatterns("http://*").withSockJS();
+		registry.addEndpoint("/ws").setAllowedOrigins(allowedOrigin).withSockJS();
 	}
 
 	@Override
