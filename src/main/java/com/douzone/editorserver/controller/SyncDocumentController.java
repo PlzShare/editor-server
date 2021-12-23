@@ -27,13 +27,15 @@ public class SyncDocumentController {
 	private DocumentService documentService;
 
 	private ConcurrentMap<Long, List<Map>> documentChanges = new ConcurrentHashMap<Long, List<Map>>();
+	private ConcurrentMap<Long, List<User>> documentMemberList = new ConcurrentHashMap<Long, List<User>>();
 	
 	@PostMapping("/pub/{docNo}")
 	public void pub(@PathVariable Long docNo, @RequestBody Map incomingChange, @AuthUser User authUser) throws InterruptedException {
 		System.out.println(authUser);
 		incomingChange.keySet().forEach((key) -> System.out.println("key : " + key + " , value : " + incomingChange.get(key)));		
 		incomingChange.put("user", authUser.getNo());
-
+		incomingChange.put("nickname", authUser.getNickname());
+		
 		List<Map> changeList = documentChanges.get(docNo);
 		
 		System.out.println("-==========================start========================================================");
@@ -162,5 +164,29 @@ public class SyncDocumentController {
 		documentChanges.putIfAbsent(docNo, new ArrayList<Map>());
 		
 		return documentChanges.get(docNo);
+	}
+	@PostMapping("/join/{docNo}")
+	public void notifyJoin(@AuthUser User authUser, @PathVariable Long docNo, String sid) {
+		documentMemberList.putIfAbsent(docNo, new ArrayList<>());
+		List<User> list = documentMemberList.get(docNo);
+
+		list.add(authUser);
+		
+		simpMessagingTemplate.convertAndSend("/sub/" + docNo + "/members", authUser);
+	}
+	
+	@PostMapping("/leave/{docNo}")
+	public void nofifyLeave(@AuthUser User authUser, @PathVariable Long docNo, String sid) {
+		List<User> list = documentMemberList.get(docNo);
+		boolean removeIf = list.removeIf((mem) -> mem.getNo().equals(authUser.getNo()));
+		
+		System.out.println("8888888888888888888888888888888");
+		System.out.println(removeIf);
+		simpMessagingTemplate.convertAndSend("/sub/" + docNo + "/members", authUser);		
+	}
+	
+	@GetMapping("/members/{docNo}")
+	public List<User> getMemberList(@PathVariable Long docNo){
+		return documentMemberList.get(docNo);
 	}
 }

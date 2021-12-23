@@ -12,10 +12,13 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import com.douzone.editorserver.annotation.AuthUser;
 import com.douzone.editorserver.util.TokenValidator;
 import com.douzone.editorserver.vo.User;
 
@@ -38,9 +41,6 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
 		// TODO Auto-generated method stub
 		registry.setApplicationDestinationPrefixes("/pub").enableSimpleBroker("/sub");
 	}
-
-	
-
 
 	@Override
 	public void configureClientInboundChannel(ChannelRegistration registration) {
