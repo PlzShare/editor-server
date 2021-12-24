@@ -1,5 +1,6 @@
 package com.douzone.editorserver.controller;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -195,23 +196,21 @@ public class SyncDocumentController {
 //		System.out.println(documentChanges.get(docNo));
 //		documentChanges.putIfAbsent(docNo, new ArrayList<Map>());
 //		return documentChanges.get(docNo);
-		List<Map> result = redisTemplate
-									.opsForList()
-									.range("change:" + docNo, 0, -1)
-									.stream()
-									.map(e -> {
-										try {
-											return objectMapper.readValue(e, Map.class);
-										} catch (JsonMappingException e1) {
-											// TODO Auto-generated catch block
-											e1.printStackTrace();
-										} catch (JsonProcessingException e1) {
-											// TODO Auto-generated catch block
-											e1.printStackTrace();
-										}
-										return null;
-									})
-									.toList();
+		List<Map> result = new ArrayList<Map>();
+		redisTemplate
+				.opsForList()
+				.range("change:" + docNo, 0, -1)
+				.forEach(e -> {
+					try {
+						result.add(objectMapper.readValue(e, Map.class));
+					} catch (JsonMappingException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					} catch (JsonProcessingException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+				});
 		System.out.println(result);
 		
 		return result;
@@ -235,21 +234,22 @@ public class SyncDocumentController {
 	
 	@GetMapping("/members/{docNo}")
 	public List getMemberList(@PathVariable Long docNo){
-		return redisTemplate.opsForList()
-							.range("member:"+docNo, 0, -1)
-							.stream()
-							.map((e) -> {
-								try {
-									return objectMapper.readValue(e, Map.class);
-								} catch (JsonMappingException e1) {
-									// TODO Auto-generated catch block
-									e1.printStackTrace();
-								} catch (JsonProcessingException e1) {
-									// TODO Auto-generated catch block
-									e1.printStackTrace();
-								}
-								return null;
-							})
-							.toList();
+		List<Map> result = new ArrayList<>();
+		
+		redisTemplate.opsForList()
+				.range("member:"+docNo, 0, -1)
+				.forEach((e) -> {
+					try {
+						result.add(objectMapper.readValue(e, Map.class));
+					} catch (JsonMappingException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					} catch (JsonProcessingException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+				});
+		
+		return result;
 	}
 }
