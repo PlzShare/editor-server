@@ -34,7 +34,7 @@ public class WebConfig implements WebMvcConfigurer{
 				.addPathPatterns("/**");
 		
 		registry.addInterceptor(authInterceptor())
-				.addPathPatterns("/pub/**","/history/**", "/join/**", "/leave/**");
+				.addPathPatterns("/pub/**","/history/**", "/join/**", "/leave/**","/save/**");
 	}
 	@Override
 	public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {

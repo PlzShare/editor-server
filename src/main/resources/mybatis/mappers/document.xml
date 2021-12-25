@@ -6,4 +6,10 @@
 		from document
 		where no=#{no}
 	</select>
+	<update id="update" parameterType="document">
+		update document
+		set title=#{title},
+			contents=#{contents}
+		where no=#{no}
+	</update>
 </mapper>

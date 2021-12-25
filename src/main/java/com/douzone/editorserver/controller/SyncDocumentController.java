@@ -7,15 +7,19 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.douzone.editorserver.annotation.AuthUser;
 import com.douzone.editorserver.service.DocumentService;
+import com.douzone.editorserver.vo.Document;
 import com.douzone.editorserver.vo.User;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -34,11 +38,9 @@ public class SyncDocumentController {
 	@Autowired
 	private ObjectMapper objectMapper;
 	
-	
 	@PostMapping("/pub/{docNo}")
 	public void pub(@PathVariable Long docNo, @RequestBody Map incomingChange, @AuthUser User authUser) throws InterruptedException, JsonProcessingException{
 		System.out.println(authUser);
-		
 		
 		incomingChange.keySet().forEach((key) -> System.out.println("key : " + key + " , value : " + incomingChange.get(key)));		
 		incomingChange.put("user", authUser.getNo());
@@ -215,6 +217,28 @@ public class SyncDocumentController {
 		
 		return result;
 	}
+	
+	@PutMapping("/save/{docNo}")
+	public ResponseEntity save(@PathVariable Long docNo, @RequestBody Document document) throws InterruptedException {
+		//waiting, cas
+		while(redisTemplate.opsForSet().add("lock:" + docNo, LOCK) == 0) {
+			Thread.sleep(50);
+			System.out.println("waiting....");
+		}
+		
+		redisTemplate.delete("change:" + docNo);
+		
+		document.setNo(docNo);
+		System.out.println(document);
+		documentService.save(document);
+		
+		redisTemplate.convertAndSend("/sub/" + document.getNo() + "/save", "saved");
+		
+		
+		redisTemplate.opsForSet().remove("lock:" + docNo, LOCK);
+		return new ResponseEntity(HttpStatus.OK);
+	}
+	
 	@PostMapping("/join/{docNo}")
 	public void notifyJoin(@AuthUser User authUser, @PathVariable Long docNo, String sid) throws JsonProcessingException {
 		String userString = objectMapper.writeValueAsString(authUser);
