@@ -1,5 +1,6 @@
 package com.douzone.editorserver.controller;
 
+import java.lang.reflect.Member;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -242,26 +243,25 @@ public class SyncDocumentController {
 	@PostMapping("/join/{docNo}")
 	public void notifyJoin(@AuthUser User authUser, @PathVariable Long docNo, String sid) throws JsonProcessingException {
 		String userString = objectMapper.writeValueAsString(authUser);
-		redisTemplate.opsForList().rightPush("member:" + docNo, userString);
 		
+		redisTemplate.opsForSet().add("member:" + docNo, userString);		
 		redisTemplate.convertAndSend("/sub/" + docNo + "/members", userString);
-//		simpMessagingTemplate.convertAndSend("/sub/" + docNo + "/members", authUser);
 	}
 	
 	@PostMapping("/leave/{docNo}")
 	public void nofifyLeave(@AuthUser User authUser, @PathVariable Long docNo, String sid) throws JsonProcessingException {
 		String userString = objectMapper.writeValueAsString(authUser);
-		redisTemplate.opsForList().remove("member:" + docNo, 0, userString);
+		
+		redisTemplate.opsForSet().remove("member:" + docNo, userString);
 		redisTemplate.convertAndSend("/sub/" + docNo + "/members", userString);
-//		simpMessagingTemplate.convertAndSend("/sub/" + docNo + "/members", authUser);		
 	}
 	
 	@GetMapping("/members/{docNo}")
 	public List getMemberList(@PathVariable Long docNo){
 		List<Map> result = new ArrayList<>();
 		
-		redisTemplate.opsForList()
-				.range("member:"+docNo, 0, -1)
+		redisTemplate.opsForSet()
+				.members("member:"+docNo)
 				.forEach((e) -> {
 					try {
 						result.add(objectMapper.readValue(e, Map.class));
@@ -273,6 +273,7 @@ public class SyncDocumentController {
 						e1.printStackTrace();
 					}
 				});
+				
 		
 		return result;
 	}

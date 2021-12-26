@@ -87,7 +87,6 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
                 } else if(StompCommand.DISCONNECT.equals(accessor.getCommand())){
                     System.out.println("Exit ");
                 } else {
-                	System.out.println("9088979086879567689708-90987674859607-8");
                 	System.out.println(accessor);
                 }
                 return message;
