@@ -1,6 +1,5 @@
 package com.douzone.editorserver.controller;
 
-import java.lang.reflect.Member;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,124 +39,138 @@ public class SyncDocumentController {
 	private ObjectMapper objectMapper;
 	
 	@PostMapping("/pub/{docNo}")
-	public void pub(@PathVariable Long docNo, @RequestBody Map incomingChange, @AuthUser User authUser) throws InterruptedException, JsonProcessingException{
+	public void pub(@PathVariable Long docNo, @RequestBody Map incomingChange, @AuthUser User authUser){
 		System.out.println(authUser);
 		
 		incomingChange.keySet().forEach((key) -> System.out.println("key : " + key + " , value : " + incomingChange.get(key)));		
 		incomingChange.put("user", authUser.getNo());
 		incomingChange.put("nickname", authUser.getNickname());
 				
-		
 		//waiting, cas
 		while(redisTemplate.opsForSet().add("lock:" + docNo, LOCK) == 0) {
-			Thread.sleep(50);
+			try {
+
+				Thread.sleep(50);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 			System.out.println("waiting....");
 		}
 		
-		List<String> changeList = redisTemplate.opsForList().range("change:" + docNo, 0, -1);
-		
-		System.out.println("-==========================start========================================================");
-		int version;
-		
-		if(changeList.size() == 0) {
-			System.out.println("changeList is Empty");
-			version = (int) (documentService.getVersion(docNo) + 1);			
-		}else {
-			Map prevChange = null;
-			try {
-				prevChange = objectMapper.readValue(changeList.get(changeList.size() - 1), Map.class);
-			} catch (JsonMappingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (JsonProcessingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+		try {
+			List<String> changeList = redisTemplate.opsForList().range("change:" + docNo, 0, -1);
+			
+			System.out.println("-==========================start========================================================");
+			int version;
+			
+			if(changeList.size() == 0) {
+				System.out.println("changeList is Empty");
+				version = (int) (documentService.getVersion(docNo) + 1);			
+			}else {
+				Map prevChange = null;
+				try {
+					prevChange = objectMapper.readValue(changeList.get(changeList.size() - 1), Map.class);
+				} catch (JsonMappingException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (JsonProcessingException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				version = (int) prevChange.get("version") + 1;						
 			}
-			version = (int) prevChange.get("version") + 1;						
-		}
-		incomingChange.put("version", version);
-		
-		Integer baseVersion = (Integer)incomingChange.get("baseVersion");
-		
-		Map oldChange = null;
-		List<Map> oldOPs = null;
-		
-		List<Map> incomingOPs = (List<Map>) ((Map)incomingChange.get("delta")).get("ops");
-		System.out.println(incomingOPs);
+			incomingChange.put("version", version);
+			
+			Integer baseVersion = (Integer)incomingChange.get("baseVersion");
+			
+			Map oldChange = null;
+			List<Map> oldOPs = null;
+			
+			List<Map> incomingOPs = (List<Map>) ((Map)incomingChange.get("delta")).get("ops");
+			System.out.println(incomingOPs);
 
-		for(int i = changeList.size() - 1; i >= 0; i--) {
+			for(int i = changeList.size() - 1; i >= 0; i--) {
+				try {
+					oldChange = objectMapper.readValue(changeList.get(i), Map.class);
+				} catch (JsonMappingException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (JsonProcessingException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+				if((int)oldChange.get("version") <= baseVersion){
+					System.out.println("=000000000000000000000000탈출11111111111111111111111111111111111");
+					break;
+				}
+				if(oldChange.get("sid").equals(incomingChange.get("sid"))) continue;
+				
+				// start
+				oldOPs = (List<Map>) ((Map)oldChange.get("delta")).get("ops");
+				
+				int incomingCursor = 0;
+				int len;
+				
+				if(!(incomingOPs.get(0).size() == 1 && incomingOPs.get(0).containsKey("retain"))) {
+					// index가 0인 연산
+					int offset = getTransformedOffset(0, oldOPs, (String)incomingChange.get("sid"), (String)oldChange.get("sid"));
+					if(offset != 0) {
+						Map retainOP = new HashMap<>();
+						retainOP.put("retain", offset);
+						incomingOPs.add(0, retainOP);
+						incomingCursor += offset;
+					}
+				}
+				
+				for(Map incomingOP : incomingOPs) {			
+					if(incomingOP.containsKey("retain")) {
+						incomingCursor += (Integer)incomingOP.get("retain");
+					}
+					
+					if(incomingOP.containsKey("insert")) {
+						if(incomingOP.get("insert") instanceof String) {
+							len = ((String)incomingOP.get("insert")).length();
+						}else {
+							len = 1;
+						}
+						incomingCursor += len;
+					}
+					
+					// retain이 아니면 transform 대상이 아님
+					if(!(incomingOP.size() == 1 && incomingOP.containsKey("retain"))) continue;
+					
+					// transform
+					int offset = getTransformedOffset(incomingCursor, oldOPs, (String) incomingChange.get("sid"), (String) oldChange.get("sid"));
+					if(offset != 0) {
+						incomingOP.put("retain", (Integer)incomingOP.get("retain") + offset);						
+						incomingCursor += offset;
+					}
+					System.out.println("transformed");
+					System.out.println(incomingOP);
+				}
+			}
+			
 			try {
-				oldChange = objectMapper.readValue(changeList.get(i), Map.class);
-			} catch (JsonMappingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				redisTemplate.opsForList().rightPush("change:" + docNo, objectMapper.writeValueAsString(incomingChange));
 			} catch (JsonProcessingException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			
-			if((int)oldChange.get("version") <= baseVersion){
-				System.out.println("=000000000000000000000000탈출11111111111111111111111111111111111");
-				break;
-			}
-			if(oldChange.get("sid").equals(incomingChange.get("sid"))) continue;
-			
-			// start
-			oldOPs = (List<Map>) ((Map)oldChange.get("delta")).get("ops");
-			
-			int incomingCursor = 0;
-			int len;
-			
-			if(!(incomingOPs.get(0).size() == 1 && incomingOPs.get(0).containsKey("retain"))) {
-				// index가 0인 연산
-				int offset = getTransformedOffset(0, oldOPs, (String)incomingChange.get("sid"), (String)oldChange.get("sid"));
-				if(offset != 0) {
-					Map retainOP = new HashMap<>();
-					retainOP.put("retain", offset);
-					incomingOPs.add(0, retainOP);
-					incomingCursor += offset;
-				}
-			}
-			
-			for(Map incomingOP : incomingOPs) {			
-				if(incomingOP.containsKey("retain")) {
-					incomingCursor += (Integer)incomingOP.get("retain");
-				}
-				
-				if(incomingOP.containsKey("insert")) {
-					if(incomingOP.get("insert") instanceof String) {
-						len = ((String)incomingOP.get("insert")).length();
-					}else {
-						len = 1;
-					}
-					incomingCursor += len;
-				}
-				
-				// retain이 아니면 transform 대상이 아님
-				if(!(incomingOP.size() == 1 && incomingOP.containsKey("retain"))) continue;
-				
-				// transform
-				int offset = getTransformedOffset(incomingCursor, oldOPs, (String) incomingChange.get("sid"), (String) oldChange.get("sid"));
-				if(offset != 0) {
-					incomingOP.put("retain", (Integer)incomingOP.get("retain") + offset);						
-					incomingCursor += offset;
-				}
-				System.out.println("transformed");
-				System.out.println(incomingOP);
-			}
+		}finally {
+			redisTemplate.opsForSet().remove("lock:" + docNo, LOCK);			
 		}
+		
+		
+		
 		
 		try {
-			redisTemplate.opsForList().rightPush("change:" + docNo, objectMapper.writeValueAsString(incomingChange));
+			redisTemplate.convertAndSend("/sub/" + docNo, objectMapper.writeValueAsString(incomingChange));
 		} catch (JsonProcessingException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		redisTemplate.opsForSet().remove("lock:" + docNo, LOCK);
-		
-		
-		redisTemplate.convertAndSend("/sub/" + docNo, objectMapper.writeValueAsString(incomingChange));
-//		simpMessagingTemplate.convertAndSend("/sub/" + docNo, incomingChange);
 	}
 	
 	private int getTransformedOffset(Integer incomingCursor, List<Map> oldOPs, String incomingSid, String oldSid) {
@@ -220,23 +233,31 @@ public class SyncDocumentController {
 	}
 	
 	@PutMapping("/save/{docNo}")
-	public ResponseEntity save(@PathVariable Long docNo, @RequestBody Document document) throws InterruptedException {
+	public ResponseEntity save(@PathVariable Long docNo, @RequestBody Document document){
 		//waiting, cas
 		while(redisTemplate.opsForSet().add("lock:" + docNo, LOCK) == 0) {
-			Thread.sleep(50);
-			System.out.println("waiting....");
+			try {
+				Thread.sleep(50);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			System.out.println("waiting....LOCK Release");
 		}
 		
-		redisTemplate.delete("change:" + docNo);
+		try {
+			redisTemplate.delete("change:" + docNo);
+			
+			document.setNo(docNo);
+			System.out.println(document);
+			documentService.save(document);
+			
+			redisTemplate.convertAndSend("/sub/" + document.getNo() + "/save", "saved");
+			
+		}finally{
+			redisTemplate.opsForSet().remove("lock:" + docNo, LOCK);			
+		}
 		
-		document.setNo(docNo);
-		System.out.println(document);
-		documentService.save(document);
-		
-		redisTemplate.convertAndSend("/sub/" + document.getNo() + "/save", "saved");
-		
-		
-		redisTemplate.opsForSet().remove("lock:" + docNo, LOCK);
 		return new ResponseEntity(HttpStatus.OK);
 	}
 	
@@ -244,7 +265,7 @@ public class SyncDocumentController {
 	public void notifyJoin(@AuthUser User authUser, @PathVariable Long docNo, String sid) throws JsonProcessingException {
 		String userString = objectMapper.writeValueAsString(authUser);
 		
-		redisTemplate.opsForSet().add("member:" + docNo, userString);		
+		redisTemplate.opsForSet().add("member:" + docNo, userString);
 		redisTemplate.convertAndSend("/sub/" + docNo + "/members", userString);
 	}
 	
